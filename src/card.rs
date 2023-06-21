@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use leafwing_input_manager::{prelude::InputManagerPlugin, Actionlike};
 
 use crate::{loading::TextureAssets, GameState};
 
@@ -17,5 +18,6 @@ pub struct CardPlugin;
 impl Plugin for CardPlugin {
     fn build(&self, app: &mut App) {}
 }
+
 //system for dragging cards
 //card moving to hand
