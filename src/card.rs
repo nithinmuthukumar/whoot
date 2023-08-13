@@ -11,7 +11,14 @@ pub struct CardBundle {
     pub card: Card,
     #[bundle]
     pub sprite: SpriteBundle,
+    pub ordinal: Ordinal,
 }
+#[derive(Component)]
+pub struct Draggable {
+    pub selected: bool,
+}
+#[derive(Component)]
+pub struct Ordinal(pub usize);
 
 pub struct CardPlugin;
 
