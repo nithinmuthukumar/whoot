@@ -5,14 +5,14 @@ use leafwing_input_manager::{
 };
 
 use crate::{
-    card::{Card, CardBundle, Draggable, Ordinal},
-    hand::Hand,
+    card::{Card, CardBundle, Ordinal, Pickable},
+    hand::{Hand, UpdatePosition},
     loading::TextureAssets,
     GameState,
 };
 
 // This is the list of "things in the game I want to be able to do based on input"
-#[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug)]
+#[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum DeckAction {
     Draw,
 }
@@ -26,10 +26,12 @@ pub struct DeckPlugin;
 
 impl Plugin for DeckPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(spawn_deck.in_schedule(OnEnter(GameState::Playing)))
-            .add_system(draw_card.in_set(OnUpdate(GameState::Playing)))
-            .add_system(position_cards.in_set(OnUpdate(GameState::Playing)))
-            .add_plugin(InputManagerPlugin::<DeckAction>::default());
+        app.add_systems(OnEnter(GameState::Playing), spawn_deck)
+            .add_systems(
+                Update,
+                (position_cards, draw_card).run_if(in_state(GameState::Playing)),
+            )
+            .add_plugins(InputManagerPlugin::<DeckAction>::default());
     }
 }
 
@@ -99,6 +101,7 @@ fn draw_card(
     )>,
     mut q_cards: Query<&Card>,
     mut hand: Query<(Entity, &mut Hand)>,
+    mut writer: EventWriter<UpdatePosition>,
 ) {
     let (action_state, transform, mut deck, children) = query.single_mut();
 
@@ -106,12 +109,13 @@ fn draw_card(
         let (entity, mut hand) = hand.single_mut();
         if let Some(drawn) = children.last() {
             cmd.entity(*drawn).remove_parent();
-            cmd.entity(*drawn).insert(Draggable { selected: false });
+            cmd.entity(*drawn).insert(Pickable::default());
             cmd.entity(*drawn).insert(Transform::clone(transform));
             cmd.entity(*drawn).insert(Ordinal(hand.size));
             deck.size -= 1;
             cmd.entity(entity).push_children(&[*drawn]);
             hand.size += 1;
+            writer.send(UpdatePosition {});
         };
 
         println!("Created");

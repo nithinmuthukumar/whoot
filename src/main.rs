@@ -1,7 +1,8 @@
 #![allow(clippy::too_many_arguments, clippy::type_complexity)]
 
 use bevy::prelude::*;
-use whoot::{GamePlugin, GameState};
+use bevy_tweening::*;
+use whoot::GamePlugin;
 
 fn main() {
     App::new()
@@ -14,6 +15,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugin(GamePlugin)
+        .add_plugins(TweeningPlugin)
+        .add_plugins(GamePlugin)
         .run();
 }

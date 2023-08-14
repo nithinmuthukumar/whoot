@@ -18,6 +18,6 @@ fn setup(mut cmd: Commands) {
     cmd.spawn((Camera2dBundle::default(), MainCamera));
 }
 
-fn lerp(x: f32, y: f32, by: f32) -> f32 {
+pub fn lerp(x: f32, y: f32, by: f32) -> f32 {
     x * (1. - by) + y * by
 }

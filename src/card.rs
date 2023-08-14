@@ -9,13 +9,23 @@ pub struct Card;
 #[derive(Bundle)]
 pub struct CardBundle {
     pub card: Card,
-    #[bundle]
     pub sprite: SpriteBundle,
     pub ordinal: Ordinal,
 }
 #[derive(Component)]
-pub struct Draggable {
+pub struct Pickable {
     pub selected: bool,
+    pub hovered: bool,
+    pub target: Option<Vec2>,
+}
+impl Default for Pickable {
+    fn default() -> Self {
+        Self {
+            selected: false,
+            hovered: false,
+            target: None,
+        }
+    }
 }
 #[derive(Component)]
 pub struct Ordinal(pub usize);
