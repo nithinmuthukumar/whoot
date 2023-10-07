@@ -4,7 +4,16 @@ use leafwing_input_manager::{prelude::InputManagerPlugin, Actionlike};
 use crate::{loading::TextureAssets, GameState};
 
 #[derive(Component)]
-pub struct Card;
+pub struct Card {
+    pub front: Handle<Image>,
+    pub back: Handle<Image>,
+    pub face_up: bool,
+}
+// This is the list of "things in the game I want to be able to do based on input"
+#[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
+pub enum CardAction {
+    Flip,
+}
 
 #[derive(Bundle)]
 pub struct CardBundle {
@@ -13,27 +22,20 @@ pub struct CardBundle {
     pub ordinal: Ordinal,
 }
 #[derive(Component)]
-pub struct Pickable {
-    pub selected: bool,
-    pub hovered: bool,
-    pub target: Option<Vec2>,
+pub struct CardFace {
+    pub is_front: bool,
 }
-impl Default for Pickable {
-    fn default() -> Self {
-        Self {
-            selected: false,
-            hovered: false,
-            target: None,
-        }
-    }
-}
+pub fn card_face(q_cards: Query<(&Visibility, &Card, &Children)>) {}
 #[derive(Component)]
 pub struct Ordinal(pub usize);
 
 pub struct CardPlugin;
 
 impl Plugin for CardPlugin {
-    fn build(&self, app: &mut App) {}
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, (card_face).run_if(in_state(GameState::Playing)))
+            .add_plugins(InputManagerPlugin::<CardAction>::default());
+    }
 }
 
 //system for dragging cards

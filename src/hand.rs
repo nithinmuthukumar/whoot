@@ -1,7 +1,10 @@
 use std::{f32::INFINITY, time::Duration};
 
 use bevy::{input::mouse::MouseButtonInput, math::Vec2Swizzles, prelude::*, window::PrimaryWindow};
-use bevy_tweening::{lens::TransformRotationLens, *};
+use bevy_tweening::{
+    lens::{TransformRotationLens, TransformScaleLens},
+    *,
+};
 use leafwing_input_manager::{
     action_state,
     prelude::{ActionState, InputManagerPlugin, InputMap},
@@ -10,17 +13,24 @@ use leafwing_input_manager::{
 
 use crate::{
     camera::{lerp, MainCamera},
-    card::{Card, Ordinal, Pickable},
-    deck::DeckAction,
+    card::{Card, Ordinal},
+    deck::{draw_card, DeckAction},
     GameState,
 };
 
 #[derive(Component)]
 pub struct Hand {
     pub size: usize,
+    pub selected: Option<Entity>,
+    pub hovered: Option<Entity>,
 }
 #[derive(Event)]
-pub struct UpdatePosition {}
+pub struct UpdateHand {}
+impl Default for UpdateHand {
+    fn default() -> Self {
+        Self {}
+    }
+}
 
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum HandAction {
@@ -41,6 +51,8 @@ impl Lens<Transform> for TransformLens {
         //position
         let value =
             self.start.translation + (self.end.translation - self.start.translation) * ratio;
+        target.scale = self.start.scale.lerp(self.end.scale, ratio);
+
         target.translation = value;
     }
 }
@@ -54,10 +66,10 @@ impl Plugin for HandPlugin {
             .add_systems(Update, component_animator_system::<Transform>)
             .add_systems(
                 Update,
-                (position_cards, select_card, drag_card, pickable_lerp)
+                (position_cards.before(draw_card), select_card, pickable_lerp)
                     .run_if(in_state(GameState::Playing)),
             )
-            .add_event::<UpdatePosition>();
+            .add_event::<UpdateHand>();
     }
 }
 
@@ -71,21 +83,21 @@ fn spawn_hand(mut commands: Commands) {
             },
             SpatialBundle::default(),
         ))
-        .insert(Hand { size: 0 });
+        .insert(Hand {
+            size: 0,
+            selected: None,
+            hovered: None,
+        });
 }
-//switch from children to giving each card an in hand component with a position
-//spawned card will get the next index possible in hand
-//be more abstract define deck as a zone, hand is a zone that is spread out
+//whenever hand is updated position cards in hand that are not selected by ord using a tween
 fn position_cards(
     mut cmd: Commands,
     q_hand: Query<(&Hand, &Children)>,
-    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal, &Pickable)>,
-    mut event: EventReader<UpdatePosition>,
+    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal)>,
 ) {
-    if event.is_empty() || q_hand.is_empty() {
+    if q_hand.is_empty() {
         return;
     }
-    event.clear();
 
     let (hand, children) = q_hand.single();
     let arc_length = 180.0;
@@ -94,84 +106,67 @@ fn position_cards(
     let width = (hand.size * 80).clamp(0, 600);
 
     for &child in children.iter() {
-        if let Ok((entity, card, mut transform, ord, draggable)) = q_cards.get_mut(child) {
-            if draggable.selected {
+        if let Ok((entity, card, mut transform, ord)) = q_cards.get_mut(child) {
+            if hand.selected == Some(entity) {
                 return;
             }
             let angle = (ord.0 as f32 / (hand.size as f32)) * arc_length;
-            let x = ord.0 as f32 / hand.size as f32 * width as f32;
+            let x = ord.0 as f32 / hand.size as f32 * width as f32 - 300.;
             let y = angle.to_radians().sin() * 40.0; // Calculate y position along the arc
             let rot = ord.0 as f32 / hand.size as f32 * rotation_factor - rotation_factor / 2.;
-            let tween = Tween::new(
-                EaseFunction::QuadraticInOut,
-                Duration::from_millis(250),
-                TransformLens {
-                    start: transform.clone(),
-                    end: Transform {
-                        translation: Vec3::new(x - 300., y, ord.0 as f32),
-                        rotation: Quat::from_rotation_z(-rot.to_radians()),
-                        ..default()
-                    },
-                },
-            );
-            cmd.entity(entity).insert(Animator::new(tween));
-
-            // transform.translation.x = x - 300.;
-            // transform.translation.y = y;
-            // transform.translation.z = ord.0 as f32;
+            transform.translation.x = transform.translation.x.lerp(&x, &0.2);
+            transform.translation.y = transform.translation.y.lerp(&y, &0.2);
+            transform.translation.z = ord.0 as f32;
+            transform.rotation = transform
+                .rotation
+                .lerp(Quat::from_rotation_z(-rot.to_radians()), 0.2);
         }
     }
 }
-fn pickable_lerp(mut q_cards: Query<(&Card, &mut Transform, &mut Pickable)>) {
-    for (card, mut transform, pickable) in q_cards.iter_mut() {
-        if pickable.selected {
-            if let Some(target) = pickable.target {
-                transform.translation.x = transform.translation.x.lerp(&target.x, &0.2);
-                transform.translation.y = transform.translation.y.lerp(&target.y, &0.2);
-            }
-        }
-    }
-}
-fn drag_card(
-    mut q_cards: Query<(&Card, &mut Transform, &mut Pickable)>,
+//whenever a card is selected move it toward the target
+fn pickable_lerp(
+    mut q_hand: Query<&Hand>,
+    mut q_cards: Query<(Entity, &Card, &mut Transform)>,
     mut q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut q_window: Query<&Window, With<PrimaryWindow>>,
 ) {
-    if let Some(pos) = q_window.single().cursor_position() {
-        let (camera, camera_transform) = q_camera.single();
-        if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, pos) {
-            for (card, mut transform, mut draggable) in q_cards.iter_mut() {
-                if !draggable.selected {
-                    continue;
+    if let Some(selected) = q_hand.single().selected {
+        if let Some(pos) = q_window.single().cursor_position() {
+            let (camera, camera_transform) = q_camera.single();
+            if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, pos) {
+                if let Ok((entity, card, mut transform)) = q_cards.get_mut(selected) {
+                    transform.translation.x = transform.translation.x.lerp(&world_pos.x, &0.2);
+                    transform.translation.y = transform.translation.y.lerp(&world_pos.y, &0.2);
                 }
-                draggable.target = Some(world_pos);
             }
         }
     }
 }
+
 fn select_card(
     mut cmd: Commands,
-    mut writer: EventWriter<UpdatePosition>,
+    mut writer: EventWriter<UpdateHand>,
     mut query: Query<(&ActionState<HandAction>, &mut Hand, &mut Children)>,
     mut q_window: Query<&Window, With<PrimaryWindow>>,
-    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal, &mut Pickable)>,
+    mut q_cards: Query<(Entity, &Card, &Transform, &Ordinal)>,
     mut q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
 ) {
     if query.is_empty() {
         return;
     }
 
-    let (action_state, hand, children) = query.single_mut();
-    if action_state.just_pressed(HandAction::Select) {
+    let (action_state, mut hand, children) = query.single_mut();
+    let mut max_ord = None;
+    let mut hovered_entity = None;
+
+    if hand.selected.is_none() {
         if let Some(pos) = q_window.single().cursor_position() {
             let (camera, camera_transform) = q_camera.single();
             if let Some(world_pos) = camera.viewport_to_world_2d(camera_transform, pos) {
-                let mut selected = None;
                 for &child in children.iter() {
-                    if let Ok((entity, card, transform, ord, mut draggable)) =
-                        q_cards.get_mut(child)
-                    {
-                        if let Some(s) = selected {
+                    //get the topmost hovered card
+                    if let Ok((entity, card, transform, ord)) = q_cards.get_mut(child) {
+                        if let Some(s) = max_ord {
                             if s > ord.0 {
                                 continue;
                             }
@@ -180,69 +175,90 @@ fn select_card(
                         let rotation = transform.rotation.to_axis_angle().1;
                         let half_width = 70.;
                         let half_height = 95.;
-
-                        let transform_matrix = transform.compute_matrix();
-                        let rotated_corner_1 = transform_matrix.transform_point3(Vec3::new(
-                            -half_width,
-                            -half_height,
-                            0.0,
-                        ));
-                        let rotated_corner_2 = transform_matrix.transform_point3(Vec3::new(
-                            half_width,
-                            -half_height,
-                            0.0,
-                        ));
-                        let rotated_corner_3 = transform_matrix.transform_point3(Vec3::new(
-                            half_width,
-                            half_height,
-                            0.0,
-                        ));
-                        let rotated_corner_4 = transform_matrix.transform_point3(Vec3::new(
-                            -half_width,
-                            half_height,
-                            0.0,
-                        ));
-                        let rotated_bounds = [
-                            Vec2::new(rotated_corner_1.x, rotated_corner_1.y),
-                            Vec2::new(rotated_corner_2.x, rotated_corner_2.y),
-                            Vec2::new(rotated_corner_3.x, rotated_corner_3.y),
-                            Vec2::new(rotated_corner_4.x, rotated_corner_4.y),
-                        ];
-                        //TODO LOOK AT Z INDEX TO MAKE FINAL CHOICE
+                        let rotated_bounds =
+                            calculate_rotated_bounds(transform, half_width, half_height);
 
                         if point_in_polygon(world_pos, &rotated_bounds) {
-                            selected = Some(ord.0);
-                        }
-                    }
-                }
-                if let Some(s) = selected {
-                    for (entity, card, transform, ord, mut draggable) in q_cards.iter_mut() {
-                        if s == ord.0 {
-                            draggable.selected = true;
-                            let tween = Tween::new(
-                                EaseFunction::QuadraticInOut,
-                                Duration::from_millis(250),
-                                TransformRotationLens {
-                                    start: transform.rotation,
-                                    end: Quat::IDENTITY,
-                                },
-                            );
-                            cmd.entity(entity).insert(Animator::new(tween));
+                            max_ord = Some(ord.0);
+                            hovered_entity = Some(entity);
                         }
                     }
                 }
             }
         }
+        if hovered_entity != hand.hovered {
+            if let Some(h) = hand.hovered {
+                if let Ok((entity, card, transform, ord)) = q_cards.get(h) {
+                    let tween = Tween::new(
+                        EaseFunction::QuadraticInOut,
+                        Duration::from_millis(100),
+                        TransformScaleLens {
+                            start: transform.scale,
+                            end: Vec3::new(1., 1., 1.),
+                        },
+                    );
 
-        println!("selected");
-    }
-    if action_state.just_released(HandAction::Select) {
-        for (entity, card, transform, ord, mut draggable) in q_cards.iter_mut() {
-            draggable.selected = false;
+                    cmd.entity(hand.hovered.unwrap())
+                        .insert(Animator::new(tween));
+                }
+            }
+
+            hand.hovered = hovered_entity;
+            if let Some(h) = hand.hovered {
+                if let Ok((entity, card, transform, ord)) = q_cards.get(h) {
+                    let tween = Tween::new(
+                        EaseFunction::QuadraticInOut,
+                        Duration::from_millis(100),
+                        TransformScaleLens {
+                            start: transform.scale,
+                            end: Vec3::new(1.1, 1.1, 1.),
+                        },
+                    );
+                    cmd.entity(entity).insert(Animator::new(tween));
+                }
+            }
         }
-        writer.send(UpdatePosition {});
-        println!("unselected");
+        if action_state.just_pressed(HandAction::Select) && hand.hovered.is_some() {
+            hand.selected = hand.hovered;
+
+            if let Ok((entity, card, transform, ord)) = q_cards.get(hand.selected.unwrap()) {
+                //straigten the card
+                let tween = Tween::new(
+                    EaseFunction::QuadraticInOut,
+                    Duration::from_millis(250),
+                    TransformRotationLens {
+                        start: transform.rotation,
+                        end: Quat::IDENTITY,
+                    },
+                );
+                println!("straighten");
+                cmd.entity(entity).insert(Animator::new(tween));
+            }
+        }
     }
+
+    let select_released = action_state.just_released(HandAction::Select);
+    if select_released {
+        hand.selected = None;
+    }
+}
+fn calculate_rotated_bounds(transform: &Transform, half_width: f32, half_height: f32) -> [Vec2; 4] {
+    let transform_matrix = transform.compute_matrix();
+    let rotated_corner_1 =
+        transform_matrix.transform_point3(Vec3::new(-half_width, -half_height, 0.0));
+    let rotated_corner_2 =
+        transform_matrix.transform_point3(Vec3::new(half_width, -half_height, 0.0));
+    let rotated_corner_3 =
+        transform_matrix.transform_point3(Vec3::new(half_width, half_height, 0.0));
+    let rotated_corner_4 =
+        transform_matrix.transform_point3(Vec3::new(-half_width, half_height, 0.0));
+
+    [
+        Vec2::new(rotated_corner_1.x, rotated_corner_1.y),
+        Vec2::new(rotated_corner_2.x, rotated_corner_2.y),
+        Vec2::new(rotated_corner_3.x, rotated_corner_3.y),
+        Vec2::new(rotated_corner_4.x, rotated_corner_4.y),
+    ]
 }
 
 fn point_in_polygon(point: Vec2, polygon: &[Vec2]) -> bool {

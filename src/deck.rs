@@ -5,8 +5,8 @@ use leafwing_input_manager::{
 };
 
 use crate::{
-    card::{Card, CardBundle, Ordinal, Pickable},
-    hand::{Hand, UpdatePosition},
+    card::{Card, CardBundle, CardFace, Ordinal},
+    hand::{Hand, UpdateHand},
     loading::TextureAssets,
     GameState,
 };
@@ -15,6 +15,13 @@ use crate::{
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum DeckAction {
     Draw,
+}
+#[derive(Event)]
+pub struct UpdateDeck {}
+impl Default for UpdateDeck {
+    fn default() -> Self {
+        Self {}
+    }
 }
 
 #[derive(Component)]
@@ -29,14 +36,20 @@ impl Plugin for DeckPlugin {
         app.add_systems(OnEnter(GameState::Playing), spawn_deck)
             .add_systems(
                 Update,
-                (position_cards, draw_card).run_if(in_state(GameState::Playing)),
+                (position_cards.run_if(on_event::<UpdateDeck>()), draw_card)
+                    .run_if(in_state(GameState::Playing)),
             )
-            .add_plugins(InputManagerPlugin::<DeckAction>::default());
+            .add_plugins(InputManagerPlugin::<DeckAction>::default())
+            .add_event::<UpdateDeck>();
     }
 }
 
 //spawn deck when deck plugin is made
-fn spawn_deck(mut cmd: Commands, textures: Res<TextureAssets>) {
+fn spawn_deck(
+    mut cmd: Commands,
+    textures: Res<TextureAssets>,
+    mut deck_writer: EventWriter<UpdateDeck>,
+) {
     let deck_id = cmd
         .spawn((
             InputManagerBundle::<DeckAction> {
@@ -57,67 +70,105 @@ fn spawn_deck(mut cmd: Commands, textures: Res<TextureAssets>) {
     for i in 0..60 {
         let card_id = cmd
             .spawn(CardBundle {
-                card: Card,
-                sprite: SpriteBundle {
-                    texture: textures.card_blue.clone(),
-                    ..default()
+                card: Card {
+                    back: textures.card_blue.clone(),
+                    front: textures.card_ace.clone(),
+                    face_up: false,
                 },
+                sprite: SpriteBundle { ..default() },
                 ordinal: Ordinal(i),
             })
             .id();
+        let front_face = cmd
+            .spawn((
+                SpriteBundle {
+                    texture: textures.card_king.clone(),
+                    visibility: Visibility::Hidden,
+                    ..default()
+                },
+                CardFace { is_front: true },
+            ))
+            .id();
+        let back_face = cmd
+            .spawn((
+                SpriteBundle {
+                    texture: textures.card_blue.clone(),
+
+                    ..default()
+                },
+                CardFace { is_front: false },
+            ))
+            .id();
+
+        cmd.entity(card_id).push_children(&[front_face, back_face]);
         cmd.entity(deck_id).push_children(&[card_id]);
     }
+    deck_writer.send_default()
 }
 //switch from children to giving each card an in hand component with a position
 //spawned card will get the next index possible in hand
 //be more abstract define deck as a zone, hand is a zone that is spread out
 fn position_cards(
     q_deck: Query<(&Transform, &Deck, &Children)>,
-    mut q_cards: Query<(&Card, &mut Transform), Without<Deck>>,
+    mut q_cards: Query<(&Ordinal, &Card, &mut Transform), Without<Deck>>,
 ) {
-    if q_deck.is_empty() {
-        return;
-    }
-
     let (deck_t, deck, children) = q_deck.single();
-    let mut i = 1.;
 
     for &child in children.iter() {
-        if let Ok((card, mut transform)) = q_cards.get_mut(child) {
-            transform.translation.y = deck_t.translation.y + i * 0.5;
-            transform.translation.z = i;
+        if let Ok((ord, card, mut transform)) = q_cards.get_mut(child) {
+            transform.translation.y = ord.0 as f32 * 0.5;
+            transform.translation.z = ord.0 as f32;
         }
-        i += 1.;
     }
 }
 
-fn draw_card(
+pub fn draw_card(
     mut cmd: Commands,
-    mut query: Query<(
-        &ActionState<DeckAction>,
-        &Transform,
-        &mut Deck,
-        &mut Children,
-    )>,
-    mut q_cards: Query<&Card>,
+    mut query: Query<
+        (
+            &ActionState<DeckAction>,
+            &Transform,
+            &mut Deck,
+            &mut Children,
+        ),
+        Without<Card>,
+    >,
+    mut q_cards: Query<(&Card, &mut Ordinal, &mut Transform)>,
     mut hand: Query<(Entity, &mut Hand)>,
-    mut writer: EventWriter<UpdatePosition>,
+    mut hand_writer: EventWriter<UpdateHand>,
+    mut deck_writer: EventWriter<UpdateDeck>,
 ) {
-    let (action_state, transform, mut deck, children) = query.single_mut();
+    let (action_state, deck_transform, mut deck, children) = query.single_mut();
 
     if action_state.just_pressed(DeckAction::Draw) {
         let (entity, mut hand) = hand.single_mut();
-        if let Some(drawn) = children.last() {
-            cmd.entity(*drawn).remove_parent();
-            cmd.entity(*drawn).insert(Pickable::default());
-            cmd.entity(*drawn).insert(Transform::clone(transform));
-            cmd.entity(*drawn).insert(Ordinal(hand.size));
-            deck.size -= 1;
-            cmd.entity(entity).push_children(&[*drawn]);
-            hand.size += 1;
-            writer.send(UpdatePosition {});
-        };
+        for &child in children.iter() {
+            if let Ok((card, mut ordinal, mut card_transform)) = q_cards.get_mut(child) {
+                if ordinal.0 != deck.size - 1 {
+                    continue;
+                }
+                cmd.entity(child).remove_parent();
 
-        println!("Created");
+                ordinal.0 = hand.size;
+                card_transform.translation.x += deck_transform.translation.x;
+                card_transform.translation.y += deck_transform.translation.y;
+
+                deck.size -= 1;
+                cmd.entity(entity).push_children(&[child]);
+                hand.size += 1;
+                hand_writer.send_default();
+                deck_writer.send_default();
+                return;
+            }
+        }
+    }
+}
+fn transform_relative_to(point: &GlobalTransform, reference: &GlobalTransform) -> Transform {
+    let relative_affine = reference.affine().inverse() * point.affine();
+    let (scale, rotation, translation) = relative_affine.to_scale_rotation_translation();
+    Transform {
+        translation,
+        rotation,
+        scale,
     }
 }
