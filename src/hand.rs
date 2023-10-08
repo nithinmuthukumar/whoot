@@ -13,7 +13,7 @@ use leafwing_input_manager::{
 
 use crate::{
     camera::{lerp, MainCamera},
-    card::{Card, Ordinal},
+    card::{Card, Flipping, Ordinal},
     deck::{draw_card, DeckAction},
     GameState,
 };
@@ -23,13 +23,6 @@ pub struct Hand {
     pub size: usize,
     pub selected: Option<Entity>,
     pub hovered: Option<Entity>,
-}
-#[derive(Event)]
-pub struct UpdateHand {}
-impl Default for UpdateHand {
-    fn default() -> Self {
-        Self {}
-    }
 }
 
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
@@ -68,8 +61,7 @@ impl Plugin for HandPlugin {
                 Update,
                 (position_cards.before(draw_card), select_card, pickable_lerp)
                     .run_if(in_state(GameState::Playing)),
-            )
-            .add_event::<UpdateHand>();
+            );
     }
 }
 
@@ -93,7 +85,7 @@ fn spawn_hand(mut commands: Commands) {
 fn position_cards(
     mut cmd: Commands,
     q_hand: Query<(&Hand, &Children)>,
-    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal)>,
+    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal), Without<Flipping>>,
 ) {
     if q_hand.is_empty() {
         return;
@@ -145,7 +137,6 @@ fn pickable_lerp(
 
 fn select_card(
     mut cmd: Commands,
-    mut writer: EventWriter<UpdateHand>,
     mut query: Query<(&ActionState<HandAction>, &mut Hand, &mut Children)>,
     mut q_window: Query<&Window, With<PrimaryWindow>>,
     mut q_cards: Query<(Entity, &Card, &Transform, &Ordinal)>,

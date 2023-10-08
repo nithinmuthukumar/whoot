@@ -5,8 +5,8 @@ use leafwing_input_manager::{
 };
 
 use crate::{
-    card::{Card, CardBundle, CardFace, Ordinal},
-    hand::{Hand, UpdateHand},
+    card::{Card, CardBundle, CardFace, FlipCard, Ordinal},
+    hand::Hand,
     loading::TextureAssets,
     GameState,
 };
@@ -15,13 +15,6 @@ use crate::{
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum DeckAction {
     Draw,
-}
-#[derive(Event)]
-pub struct UpdateDeck {}
-impl Default for UpdateDeck {
-    fn default() -> Self {
-        Self {}
-    }
 }
 
 #[derive(Component)]
@@ -36,20 +29,14 @@ impl Plugin for DeckPlugin {
         app.add_systems(OnEnter(GameState::Playing), spawn_deck)
             .add_systems(
                 Update,
-                (position_cards.run_if(on_event::<UpdateDeck>()), draw_card)
-                    .run_if(in_state(GameState::Playing)),
+                (position_cards, draw_card).run_if(in_state(GameState::Playing)),
             )
-            .add_plugins(InputManagerPlugin::<DeckAction>::default())
-            .add_event::<UpdateDeck>();
+            .add_plugins(InputManagerPlugin::<DeckAction>::default());
     }
 }
 
 //spawn deck when deck plugin is made
-fn spawn_deck(
-    mut cmd: Commands,
-    textures: Res<TextureAssets>,
-    mut deck_writer: EventWriter<UpdateDeck>,
-) {
+fn spawn_deck(mut cmd: Commands, textures: Res<TextureAssets>) {
     let deck_id = cmd
         .spawn((
             InputManagerBundle::<DeckAction> {
@@ -67,19 +54,9 @@ fn spawn_deck(
         ))
         .id();
 
+    //TODO make this a make_card func
     for i in 0..60 {
-        let card_id = cmd
-            .spawn(CardBundle {
-                card: Card {
-                    back: textures.card_blue.clone(),
-                    front: textures.card_ace.clone(),
-                    face_up: false,
-                },
-                sprite: SpriteBundle { ..default() },
-                ordinal: Ordinal(i),
-            })
-            .id();
-        let front_face = cmd
+        let front = cmd
             .spawn((
                 SpriteBundle {
                     texture: textures.card_king.clone(),
@@ -89,7 +66,7 @@ fn spawn_deck(
                 CardFace { is_front: true },
             ))
             .id();
-        let back_face = cmd
+        let back = cmd
             .spawn((
                 SpriteBundle {
                     texture: textures.card_blue.clone(),
@@ -100,14 +77,22 @@ fn spawn_deck(
             ))
             .id();
 
-        cmd.entity(card_id).push_children(&[front_face, back_face]);
+        let card_id = cmd
+            .spawn(CardBundle {
+                card: Card {
+                    back,
+                    front,
+                    face_up: false,
+                },
+                sprite: SpriteBundle { ..default() },
+                ordinal: Ordinal(i),
+            })
+            .id();
+
+        cmd.entity(card_id).push_children(&[front, back]);
         cmd.entity(deck_id).push_children(&[card_id]);
     }
-    deck_writer.send_default()
 }
-//switch from children to giving each card an in hand component with a position
-//spawned card will get the next index possible in hand
-//be more abstract define deck as a zone, hand is a zone that is spread out
 fn position_cards(
     q_deck: Query<(&Transform, &Deck, &Children)>,
     mut q_cards: Query<(&Ordinal, &Card, &mut Transform), Without<Deck>>,
@@ -135,8 +120,7 @@ pub fn draw_card(
     >,
     mut q_cards: Query<(&Card, &mut Ordinal, &mut Transform)>,
     mut hand: Query<(Entity, &mut Hand)>,
-    mut hand_writer: EventWriter<UpdateHand>,
-    mut deck_writer: EventWriter<UpdateDeck>,
+    mut flip_writer: EventWriter<FlipCard>,
 ) {
     let (action_state, deck_transform, mut deck, children) = query.single_mut();
 
@@ -156,19 +140,10 @@ pub fn draw_card(
                 deck.size -= 1;
                 cmd.entity(entity).push_children(&[child]);
                 hand.size += 1;
-                hand_writer.send_default();
-                deck_writer.send_default();
+                flip_writer.send(FlipCard { card: child });
+
                 return;
             }
         }
-    }
-}
-fn transform_relative_to(point: &GlobalTransform, reference: &GlobalTransform) -> Transform {
-    let relative_affine = reference.affine().inverse() * point.affine();
-    let (scale, rotation, translation) = relative_affine.to_scale_rotation_translation();
-    Transform {
-        translation,
-        rotation,
-        scale,
     }
 }
