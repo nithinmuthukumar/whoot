@@ -13,7 +13,7 @@ use leafwing_input_manager::{
 
 use crate::{
     camera::{lerp, MainCamera},
-    card::{Card, Flipping, Ordinal},
+    card::{Card, FlipCard, Flipping, Ordinal},
     deck::{draw_card, DeckAction},
     GameState,
 };
@@ -28,6 +28,7 @@ pub struct Hand {
 #[derive(Actionlike, PartialEq, Eq, Clone, Copy, Hash, Debug, Reflect)]
 pub enum HandAction {
     Select,
+    Flip,
 }
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct TransformLens {
@@ -71,7 +72,10 @@ fn spawn_hand(mut commands: Commands) {
         .spawn((
             InputManagerBundle::<HandAction> {
                 action_state: ActionState::default(),
-                input_map: InputMap::new([(MouseButton::Left, HandAction::Select)]),
+                input_map: InputMap::new([
+                    (MouseButton::Left, HandAction::Select),
+                    (MouseButton::Right, HandAction::Flip),
+                ]),
             },
             SpatialBundle::default(),
         ))
@@ -85,7 +89,7 @@ fn spawn_hand(mut commands: Commands) {
 fn position_cards(
     mut cmd: Commands,
     q_hand: Query<(&Hand, &Children)>,
-    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal), Without<Flipping>>,
+    mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal)>,
 ) {
     if q_hand.is_empty() {
         return;
@@ -102,16 +106,24 @@ fn position_cards(
             if hand.selected == Some(entity) {
                 return;
             }
+
             let angle = (ord.0 as f32 / (hand.size as f32)) * arc_length;
             let x = ord.0 as f32 / hand.size as f32 * width as f32 - 300.;
             let y = angle.to_radians().sin() * 40.0; // Calculate y position along the arc
-            let rot = ord.0 as f32 / hand.size as f32 * rotation_factor - rotation_factor / 2.;
+
+            let mut rot = ord.0 as f32 / hand.size as f32 * rotation_factor - rotation_factor / 2.;
+            if !card.face_up {
+                rot *= -1.;
+            }
             transform.translation.x = transform.translation.x.lerp(&x, &0.2);
             transform.translation.y = transform.translation.y.lerp(&y, &0.2);
             transform.translation.z = ord.0 as f32;
-            transform.rotation = transform
-                .rotation
-                .lerp(Quat::from_rotation_z(-rot.to_radians()), 0.2);
+            let before = transform.rotation.to_euler(EulerRot::XYZ);
+
+            transform.rotation = transform.rotation.lerp(
+                Quat::from_euler(EulerRot::XYZ, before.0, before.1, rot.to_radians()),
+                0.2,
+            );
         }
     }
 }
@@ -141,6 +153,7 @@ fn select_card(
     mut q_window: Query<&Window, With<PrimaryWindow>>,
     mut q_cards: Query<(Entity, &Card, &Transform, &Ordinal)>,
     mut q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    mut flip_writer: EventWriter<FlipCard>,
 ) {
     if query.is_empty() {
         return;
@@ -208,6 +221,11 @@ fn select_card(
                     cmd.entity(entity).insert(Animator::new(tween));
                 }
             }
+        }
+        if action_state.just_pressed(HandAction::Flip) && hand.hovered.is_some() {
+            flip_writer.send(FlipCard {
+                card: hand.hovered.unwrap(),
+            });
         }
         if action_state.just_pressed(HandAction::Select) && hand.hovered.is_some() {
             hand.selected = hand.hovered;

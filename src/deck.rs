@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 use leafwing_input_manager::{
     prelude::{ActionState, InputManagerPlugin, InputMap},
@@ -61,6 +63,11 @@ fn spawn_deck(mut cmd: Commands, textures: Res<TextureAssets>) {
                 SpriteBundle {
                     texture: textures.card_king.clone(),
                     visibility: Visibility::Hidden,
+                    transform: Transform {
+                        rotation: Quat::from_euler(EulerRot::XYZ, 0., PI, 0.),
+                        ..default()
+                    },
+
                     ..default()
                 },
                 CardFace { is_front: true },
@@ -70,7 +77,6 @@ fn spawn_deck(mut cmd: Commands, textures: Res<TextureAssets>) {
             .spawn((
                 SpriteBundle {
                     texture: textures.card_blue.clone(),
-
                     ..default()
                 },
                 CardFace { is_front: false },

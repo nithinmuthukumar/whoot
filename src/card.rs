@@ -60,20 +60,17 @@ pub fn flip_card(
             card.face_up = !card.face_up;
             cmd.entity(entity).insert(Flipping {
                 half: false,
-                rotation_speed: 90.0,
+                rotation_speed: 400.0,
                 current_rotation: 0.0,
             });
         }
     }
     for (entity, mut card, mut flipping, mut transform) in q_flipping.iter_mut() {
-        let delta_time = time.delta_seconds();
-
         let rotation_angle = flipping.rotation_speed * time.delta_seconds();
-        flipping.current_rotation += rotation_angle * 2.;
-        let rotation_quaternion = Quat::from_rotation_y(rotation_angle.to_radians());
-        transform.rotate(rotation_quaternion);
-        if flipping.current_rotation > 180. && !flipping.half {
+        flipping.current_rotation += rotation_angle;
+        if flipping.current_rotation > 90. && !flipping.half {
             flipping.half = true;
+
             if let Ok((front, mut f_vis)) = q_faces.get_mut(card.front) {
                 match card.face_up {
                     true => *f_vis = Visibility::Visible,
@@ -87,8 +84,12 @@ pub fn flip_card(
                 }
             }
         }
-        if flipping.current_rotation >= 360.0 {
+        if flipping.current_rotation >= 180.0 {
+            flipping.current_rotation = 0.;
+
             cmd.entity(entity).remove::<Flipping>();
         }
+        let rotation_quaternion = Quat::from_rotation_y(rotation_angle.to_radians());
+        transform.rotate(rotation_quaternion);
     }
 }
