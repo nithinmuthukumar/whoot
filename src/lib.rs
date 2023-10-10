@@ -1,3 +1,4 @@
+mod board;
 mod camera;
 mod card;
 mod deck;
@@ -25,7 +26,8 @@ pub enum GameState {
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
         app.add_state::<GameState>()
-            .add_plugins((CameraPlugin, DeckPlugin, HandPlugin, CardPlugin))
+            .add_plugin(CameraPlugin)
+            // .add_plugins((DeckPlugin, HandPlugin, CardPlugin))
             .add_plugins(LoadingPlugin);
     }
 }

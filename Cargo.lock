@@ -3604,6 +3604,7 @@ dependencies = [
  "bevy_asset_loader",
  "bevy_kira_audio",
  "bevy_tweening",
+ "lazy_static",
  "leafwing-input-manager",
  "random",
 ]
