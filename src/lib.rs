@@ -5,6 +5,7 @@ mod deck;
 mod hand;
 mod loading;
 use bevy::prelude::*;
+use board::BoardPlugin;
 use camera::CameraPlugin;
 use card::CardPlugin;
 use deck::{DeckAction, DeckPlugin};
@@ -28,6 +29,7 @@ impl Plugin for GamePlugin {
         app.add_state::<GameState>()
             .add_plugin(CameraPlugin)
             // .add_plugins((DeckPlugin, HandPlugin, CardPlugin))
-            .add_plugins(LoadingPlugin);
+            .add_plugins(LoadingPlugin)
+            .add_plugins(BoardPlugin);
     }
 }

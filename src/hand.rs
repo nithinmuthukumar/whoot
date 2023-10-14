@@ -90,6 +90,7 @@ fn position_cards(
     mut cmd: Commands,
     q_hand: Query<(&Hand, &Children)>,
     mut q_cards: Query<(Entity, &Card, &mut Transform, &Ordinal)>,
+    mut q_flipping: Query<&Flipping>,
 ) {
     if q_hand.is_empty() {
         return;
@@ -114,16 +115,20 @@ fn position_cards(
             let mut rot = ord.0 as f32 / hand.size as f32 * rotation_factor - rotation_factor / 2.;
             if !card.face_up {
                 rot *= -1.;
+            } else {
+                rot += 180.;
             }
             transform.translation.x = transform.translation.x.lerp(&x, &0.2);
             transform.translation.y = transform.translation.y.lerp(&y, &0.2);
             transform.translation.z = ord.0 as f32;
-            let before = transform.rotation.to_euler(EulerRot::XYZ);
+            if !q_flipping.contains(entity) {
+                let before = transform.rotation.to_euler(EulerRot::XYZ);
 
-            transform.rotation = transform.rotation.lerp(
-                Quat::from_euler(EulerRot::XYZ, before.0, before.1, rot.to_radians()),
-                0.2,
-            );
+                transform.rotation = transform.rotation.lerp(
+                    Quat::from_euler(EulerRot::XYZ, before.0, before.1, rot.to_radians()),
+                    0.2,
+                );
+            }
         }
     }
 }
@@ -232,15 +237,19 @@ fn select_card(
 
             if let Ok((entity, card, transform, ord)) = q_cards.get(hand.selected.unwrap()) {
                 //straigten the card
+                let before = transform.rotation.to_euler(EulerRot::XYZ);
+                let mut rot: f32 = 0.;
+                if card.face_up {
+                    rot = 180.;
+                }
                 let tween = Tween::new(
                     EaseFunction::QuadraticInOut,
                     Duration::from_millis(250),
                     TransformRotationLens {
                         start: transform.rotation,
-                        end: Quat::IDENTITY,
+                        end: Quat::from_euler(EulerRot::XYZ, before.0, before.1, rot.to_radians()),
                     },
                 );
-                println!("straighten");
                 cmd.entity(entity).insert(Animator::new(tween));
             }
         }

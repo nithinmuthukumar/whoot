@@ -31,12 +31,23 @@ impl Plugin for LoadingPlugin {
 
 #[derive(AssetCollection, Resource)]
 pub struct TextureAssets {
-    #[asset(path = "card_red.png")]
+    #[asset(path = "faces/card_red.png")]
     pub card_red: Handle<Image>,
-    #[asset(path = "card_blue.png")]
+    #[asset(path = "faces/card_blue.png")]
     pub card_blue: Handle<Image>,
     #[asset(path = "faces/cardSpadesK.png")]
     pub card_king: Handle<Image>,
     #[asset(path = "faces/cardSpadesA.png")]
     pub card_ace: Handle<Image>,
+
+    #[asset(path = "wood_tile.png")]
+    pub wood_tile: Handle<Image>,
+    #[asset(path = "brick_tile.png")]
+    pub brick_tile: Handle<Image>,
+    #[asset(path = "sheep_tile.png")]
+    pub sheep_tile: Handle<Image>,
+    #[asset(path = "ore_tile.png")]
+    pub ore_tile: Handle<Image>,
+    #[asset(path = "wheat_tile.png")]
+    pub wheat_tile: Handle<Image>,
 }

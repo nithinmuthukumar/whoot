@@ -2,75 +2,76 @@ use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
 };
+use lazy_static::lazy_static;
 
-use super::axial::Axial;
+use super::{axial::Axial, edge::Edge, hex::*, vertex::Vertex};
 
-static OFFSETS: [Axial; 6] = [
-    Axial::new(1.0, 0.0),
-    Axial::new(0.0, 1.0),
-    Axial::new(-1.0, 1.0),
-    Axial::new(-1.0, 0.0),
-    Axial::new(0.0, -1.0),
-    Axial::new(1.0, -1.0),
-];
-#[derive(Component)]
+lazy_static! {
+    static ref OFFSETS: [Axial; 6] = [
+        Axial::new(1, 0),
+        Axial::new(0, 1),
+        Axial::new(-1, 1),
+        Axial::new(-1, 0),
+        Axial::new(0, -1),
+        Axial::new(1, -1),
+    ];
+}
+#[derive(Resource)]
 pub struct Board {
     pub hexes: HashMap<Axial, Hex>,
     pub edges: HashMap<HashSet<Axial>, Edge>,
     pub vertices: HashMap<Axial, Vertex>,
     pub robber: Axial,
 }
-#[derive(Debug)]
-pub struct Edge {
-    pub path_coords: HashSet<Axial>,
-    pub path_type: EdgeType,
-}
+impl Board {
+    pub fn new() -> Self {
+        let mut board = Board {
+            hexes: HashMap::new(),
+            edges: HashMap::new(),
+            vertices: HashMap::new(),
+            robber: Axial::new(0, 0),
+        };
+        board.hexes.insert(
+            Axial::new(4, -2),
+            Hex {
+                pos: Axial::new(4, -2),
+                number: 10,
+                resource_type: super::hex::Resource::Ore,
+            },
+        );
+        board.hexes.insert(
+            Axial::new(3, 0),
+            Hex {
+                pos: Axial::new(3, 0),
+                number: 2,
+                resource_type: super::hex::Resource::Wood,
+            },
+        );
+        board.hexes.insert(
+            Axial::new(2, 2),
+            Hex {
+                pos: Axial::new(2, 2),
+                number: 2,
+                resource_type: super::hex::Resource::Wood,
+            },
+        );
+        board.hexes.insert(
+            Axial::new(3, -3),
+            Hex {
+                pos: Axial::new(3, -3),
+                number: 2,
+                resource_type: super::hex::Resource::Wood,
+            },
+        );
+        board.hexes.insert(
+            Axial::new(0, 0),
+            Hex {
+                pos: Axial::new(0, 0),
+                number: 2,
+                resource_type: super::hex::Resource::Wood,
+            },
+        );
 
-#[derive(Debug)]
-pub enum EdgeType {
-    Road,
-    None,
-}
-
-impl Edge {
-    pub fn new(path_coords: HashSet<Axial>, path_type: EdgeType) -> Self {
-        Edge {
-            path_coords,
-            path_type,
-        }
+        board
     }
-}
-pub struct Vertex {
-    pos: Axial,
-    build_type: BuildType,
-    owner: i32,
-}
-impl Vertex {
-    pub fn new(pos: Axial, build_type: BuildType, owner: i32) -> Self {
-        Vertex {
-            pos,
-            build_type,
-            owner,
-        }
-    }
-}
-pub struct Hex {
-    pub resource_type: Resource,
-    pub number: i32,
-    pub pos: Axial,
-}
-
-#[derive(Debug)]
-pub enum BuildType {
-    City,
-    Settlement,
-    None,
-}
-pub enum Resource {
-    None,
-    Ore,
-    Wheat,
-    Sheep,
-    Brick,
-    Wood,
 }

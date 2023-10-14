@@ -47,6 +47,7 @@ impl Plugin for CardPlugin {
             .add_event::<FlipCard>();
     }
 }
+//TODO rotate in axis of rotation so the card flips not in y unless straight
 pub fn flip_card(
     mut q_cards: Query<(Entity, &mut Card), Without<Flipping>>,
     mut q_flipping: Query<(Entity, &mut Card, &mut Flipping, &mut Transform)>,
