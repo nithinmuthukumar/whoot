@@ -4,6 +4,7 @@ mod card;
 mod deck;
 mod hand;
 mod loading;
+mod utils;
 use bevy::prelude::*;
 use board::BoardPlugin;
 use camera::CameraPlugin;
@@ -16,7 +17,7 @@ use loading::LoadingPlugin;
 pub struct GamePlugin;
 
 #[derive(States, Default, Clone, Eq, PartialEq, Debug, Hash)]
-pub enum GameState {
+pub enum AppState {
     // During the loading State the LoadingPlugin will load our assets
     #[default]
     Loading,
@@ -26,9 +27,9 @@ pub enum GameState {
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_state::<GameState>()
+        app.add_state::<AppState>()
             .add_plugin(CameraPlugin)
-            // .add_plugins((DeckPlugin, HandPlugin, CardPlugin))
+            .add_plugins((DeckPlugin, HandPlugin, CardPlugin))
             .add_plugins(LoadingPlugin)
             .add_plugins(BoardPlugin);
     }

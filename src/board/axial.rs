@@ -1,3 +1,5 @@
+use std::{cmp::Ordering, ops::Add};
+
 use bevy::prelude::{Vec2, Vec3};
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Axial {
@@ -12,7 +14,7 @@ impl Axial {
 
     pub fn get_cartesian(&self) -> Vec3 {
         let scale_x = 60.;
-        let scale_y = 70.;
+        let scale_y = 60.;
         let l = Vec2::new(
             f32::cos(std::f32::consts::PI / 6.0),
             f32::sin(std::f32::consts::PI / 6.0),
@@ -37,5 +39,29 @@ impl Axial {
         );
         let cx = (result.y - l.y - m * result.x + m * l.x) / (-l.y * m - l.x * m);
         Axial::new(cx as i32, result.x as i32)
+    }
+}
+impl Add<Axial> for Axial {
+    type Output = Axial;
+
+    fn add(self, other: Axial) -> Axial {
+        Axial::new(self.q + other.q, self.r + other.r)
+    }
+}
+impl PartialOrd for Axial {
+    fn partial_cmp(&self, other: &Axial) -> Option<Ordering> {
+        if self.q < other.q || (self.q == other.q && self.r < other.r) {
+            Some(Ordering::Less)
+        } else if self == other {
+            Some(Ordering::Equal)
+        } else {
+            Some(Ordering::Greater)
+        }
+    }
+}
+
+impl Ord for Axial {
+    fn cmp(&self, other: &Axial) -> Ordering {
+        self.partial_cmp(other).unwrap() // Unwrap the Option to get the Ordering
     }
 }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use leafwing_input_manager::{prelude::InputManagerPlugin, Actionlike};
 
-use crate::{loading::TextureAssets, GameState};
+use crate::{loading::TextureAssets, AppState};
 
 #[derive(Component)]
 pub struct Card {
@@ -42,7 +42,7 @@ pub struct CardPlugin;
 
 impl Plugin for CardPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, flip_card.run_if(in_state(GameState::Playing)))
+        app.add_systems(Update, flip_card.run_if(in_state(AppState::Playing)))
             .add_plugins(InputManagerPlugin::<CardAction>::default())
             .add_event::<FlipCard>();
     }

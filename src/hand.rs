@@ -12,10 +12,11 @@ use leafwing_input_manager::{
 };
 
 use crate::{
-    camera::{lerp, MainCamera},
+    camera::{lerp, CardCamera},
     card::{Card, FlipCard, Flipping, Ordinal},
     deck::{draw_card, DeckAction},
-    GameState,
+    utils::{calculate_rotated_bounds, point_in_polygon},
+    AppState,
 };
 
 #[derive(Component)]
@@ -56,12 +57,12 @@ pub struct HandPlugin;
 impl Plugin for HandPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(InputManagerPlugin::<HandAction>::default())
-            .add_systems(OnEnter(GameState::Playing), spawn_hand)
+            .add_systems(OnEnter(AppState::Playing), spawn_hand)
             .add_systems(Update, component_animator_system::<Transform>)
             .add_systems(
                 Update,
                 (position_cards.before(draw_card), select_card, pickable_lerp)
-                    .run_if(in_state(GameState::Playing)),
+                    .run_if(in_state(AppState::Playing)),
             );
     }
 }
@@ -136,7 +137,7 @@ fn position_cards(
 fn pickable_lerp(
     mut q_hand: Query<&Hand>,
     mut q_cards: Query<(Entity, &Card, &mut Transform)>,
-    mut q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    mut q_camera: Query<(&Camera, &GlobalTransform), With<CardCamera>>,
     mut q_window: Query<&Window, With<PrimaryWindow>>,
 ) {
     if let Some(selected) = q_hand.single().selected {
@@ -157,7 +158,7 @@ fn select_card(
     mut query: Query<(&ActionState<HandAction>, &mut Hand, &mut Children)>,
     mut q_window: Query<&Window, With<PrimaryWindow>>,
     mut q_cards: Query<(Entity, &Card, &Transform, &Ordinal)>,
-    mut q_camera: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
+    mut q_camera: Query<(&Camera, &GlobalTransform), With<CardCamera>>,
     mut flip_writer: EventWriter<FlipCard>,
 ) {
     if query.is_empty() {
@@ -181,7 +182,6 @@ fn select_card(
                             }
                         }
                         //card is 140,190
-                        let rotation = transform.rotation.to_axis_angle().1;
                         let half_width = 70.;
                         let half_height = 95.;
                         let rotated_bounds =
@@ -259,43 +259,4 @@ fn select_card(
     if select_released {
         hand.selected = None;
     }
-}
-fn calculate_rotated_bounds(transform: &Transform, half_width: f32, half_height: f32) -> [Vec2; 4] {
-    let transform_matrix = transform.compute_matrix();
-    let rotated_corner_1 =
-        transform_matrix.transform_point3(Vec3::new(-half_width, -half_height, 0.0));
-    let rotated_corner_2 =
-        transform_matrix.transform_point3(Vec3::new(half_width, -half_height, 0.0));
-    let rotated_corner_3 =
-        transform_matrix.transform_point3(Vec3::new(half_width, half_height, 0.0));
-    let rotated_corner_4 =
-        transform_matrix.transform_point3(Vec3::new(-half_width, half_height, 0.0));
-
-    [
-        Vec2::new(rotated_corner_1.x, rotated_corner_1.y),
-        Vec2::new(rotated_corner_2.x, rotated_corner_2.y),
-        Vec2::new(rotated_corner_3.x, rotated_corner_3.y),
-        Vec2::new(rotated_corner_4.x, rotated_corner_4.y),
-    ]
-}
-
-fn point_in_polygon(point: Vec2, polygon: &[Vec2]) -> bool {
-    let n = polygon.len();
-    let mut inside = false;
-
-    for i in 0..n {
-        let j = (i + 1) % n;
-
-        let intersect = ((polygon[i].y > point.y) != (polygon[j].y > point.y))
-            && (point.x
-                < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y)
-                    / (polygon[j].y - polygon[i].y)
-                    + polygon[i].x);
-
-        if intersect {
-            inside = !inside;
-        }
-    }
-
-    inside
 }

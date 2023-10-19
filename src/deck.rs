@@ -10,7 +10,7 @@ use crate::{
     card::{Card, CardBundle, CardFace, FlipCard, Ordinal},
     hand::Hand,
     loading::TextureAssets,
-    GameState,
+    AppState,
 };
 
 // This is the list of "things in the game I want to be able to do based on input"
@@ -28,10 +28,10 @@ pub struct DeckPlugin;
 
 impl Plugin for DeckPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Playing), spawn_deck)
+        app.add_systems(OnEnter(AppState::Playing), spawn_deck)
             .add_systems(
                 Update,
-                (position_cards, draw_card).run_if(in_state(GameState::Playing)),
+                (position_cards, draw_card).run_if(in_state(AppState::Playing)),
             )
             .add_plugins(InputManagerPlugin::<DeckAction>::default());
     }

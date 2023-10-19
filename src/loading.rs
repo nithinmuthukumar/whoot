@@ -2,18 +2,18 @@ use bevy::prelude::*;
 use bevy_asset_loader::prelude::*;
 use bevy_kira_audio::AudioSource;
 
-use crate::GameState;
+use crate::AppState;
 
 pub struct LoadingPlugin;
 
 impl Plugin for LoadingPlugin {
     fn build(&self, app: &mut App) {
         app.add_loading_state(
-            LoadingState::new(GameState::Loading).continue_to_state(GameState::Playing),
+            LoadingState::new(AppState::Loading).continue_to_state(AppState::Playing),
         )
         // .add_collection_to_loading_state::<_, FontAssets>(GameState::Loading)
         // .add_collection_to_loading_state::<_, AudioAssets>(GameState::Loading)
-        .add_collection_to_loading_state::<_, TextureAssets>(GameState::Loading);
+        .add_collection_to_loading_state::<_, TextureAssets>(AppState::Loading);
     }
 }
 
@@ -50,4 +50,8 @@ pub struct TextureAssets {
     pub ore_tile: Handle<Image>,
     #[asset(path = "wheat_tile.png")]
     pub wheat_tile: Handle<Image>,
+    #[asset(path = "desert_tile.png")]
+    pub desert_tile: Handle<Image>,
+    #[asset(path = "pickable_pos.png")]
+    pub pickable_pos: Handle<Image>,
 }
